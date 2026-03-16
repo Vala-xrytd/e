@@ -613,15 +613,17 @@ export default function ProjectsEnhanced() {
   };
 
   // Ongoing Projects Tab
-  const renderOngoingProjects = () => (
+  const renderOngoingProjects = () => {
+    const filteredProjects = getFilteredAndSortedProjects(ongoingProjects);
+    return (
     <div className="space-y-6">
-      {ongoingProjects.length === 0 ? (
+      {filteredProjects.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
           <Clock className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600">No ongoing projects</p>
+          <p className="text-slate-600">{searchQuery || statusFilter !== 'all' ? 'No projects match your filters' : 'No ongoing projects'}</p>
         </div>
       ) : (
-        ongoingProjects.map((project) => (
+        filteredProjects.map((project) => (
           <div
             key={project.id}
             className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-lg transition"
@@ -635,9 +637,9 @@ export default function ProjectsEnhanced() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {formatCurrency(project.contract_amount, project.currency_code)}
+                    {formatCurrency(calculateProjectBudget(project), project.currency_code)}
                   </div>
-                  <p className="text-xs text-slate-600 mt-1">Contract Value</p>
+                  <p className="text-xs text-slate-600 mt-1">Project Budget</p>
                 </div>
               </div>
 
@@ -812,7 +814,8 @@ export default function ProjectsEnhanced() {
         ))
       )}
     </div>
-  );
+    );
+  };
 
   // SOP Gallery Modal
   if (showSOPGallery && selectedProject) {
@@ -1003,15 +1006,17 @@ export default function ProjectsEnhanced() {
   }
 
   // Completed Projects Tab
-  const renderCompletedProjects = () => (
+  const renderCompletedProjects = () => {
+    const filteredProjects = getFilteredAndSortedProjects(completedProjects);
+    return (
     <div className="space-y-6">
-      {completedProjects.length === 0 ? (
+      {filteredProjects.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-slate-200">
           <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600">No completed projects yet</p>
+          <p className="text-slate-600">{searchQuery || statusFilter !== 'all' ? 'No projects match your filters' : 'No completed projects yet'}</p>
         </div>
       ) : (
-        completedProjects.map((project) => (
+        filteredProjects.map((project) => (
           <div
             key={project.id}
             className="bg-white rounded-lg border border-green-200 overflow-hidden hover:shadow-lg transition"
@@ -1027,9 +1032,9 @@ export default function ProjectsEnhanced() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {formatCurrency(project.contract_amount, project.currency_code)}
+                    {formatCurrency(calculateProjectBudget(project), project.currency_code)}
                   </div>
-                  <p className="text-xs text-slate-600 mt-1">Contract Value</p>
+                  <p className="text-xs text-slate-600 mt-1">Project Budget</p>
                 </div>
               </div>
 
@@ -1101,7 +1106,8 @@ export default function ProjectsEnhanced() {
         ))
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pt-24 pb-12">
@@ -1147,6 +1153,68 @@ export default function ProjectsEnhanced() {
             )}
           </button>
         </div>
+
+        {/* Filtering & Sorting Controls */}
+        {(activeTab === 'ongoing' || activeTab === 'completed') && (
+          <div className="mb-8 bg-white rounded-lg p-4 border border-slate-200 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Search */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Search</label>
+                <input
+                  type="text"
+                  placeholder="Client name or contract #"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Sort By */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="date">Date</option>
+                  <option value="amount">Amount</option>
+                  <option value="client">Client Name</option>
+                </select>
+              </div>
+
+              {/* Order */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">

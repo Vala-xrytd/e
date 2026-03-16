@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { uploadToB2 } from '../lib/b2Upload';
+import { AlertCircle, CheckCircle, Loader, Upload, File, X } from 'lucide-react';
 
 interface ContractFormProps {
   contractorId: string;
@@ -9,8 +10,12 @@ interface ContractFormProps {
 
 export default function ContractCreationForm({ contractorId, onSuccess }: ContractFormProps) {
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const [contractDocumentUrl, setContractDocumentUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [formData, setFormData] = useState({
     contract_number: '',
     client_name: '',
@@ -29,6 +34,46 @@ export default function ContractCreationForm({ contractorId, onSuccess }: Contra
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 50 * 1024 * 1024) {
+        setError('File size must be less than 50MB');
+        return;
+      }
+      setContractFile(file);
+      setError(null);
+    }
+  };
+
+  const uploadContractDocument = async () => {
+    if (!contractFile) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const fileName = `contracts/${contractorId}/${Date.now()}-${contractFile.name}`;
+      const url = await uploadToB2(contractFile, fileName, (progress) => {
+        setUploadProgress(progress);
+      });
+
+      setContractDocumentUrl(url);
+      setUploadProgress(0);
+    } catch (err: any) {
+      setError(`Failed to upload document: ${err.message}`);
+      setUploadProgress(0);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeContractDocument = () => {
+    setContractFile(null);
+    setContractDocumentUrl(null);
+    setUploadProgress(0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,6 +104,7 @@ export default function ContractCreationForm({ contractorId, onSuccess }: Contra
           contract_start_date: formData.contract_start_date,
           contract_end_date: formData.contract_end_date,
           retention_amount: retentionAmount,
+          contract_document_url: contractDocumentUrl || null,
           status: formData.status,
         })
         .select()
