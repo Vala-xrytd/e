@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import ProjectMilestoneVideoUpload from '../components/ProjectMilestoneVideoUpload';
 import ProjectTeamChat from '../components/ProjectTeamChat';
-import MilestoneProofOfWorkModal from '../components/MilestoneProofOfWorkModal';
+import ProjectsPhotoLockUploadModal from '../components/ProjectsPhotoLockUploadModal';
 
 interface ProjectSOPEvidence {
   id: string;
@@ -86,6 +86,33 @@ export default function ProjectsEnhanced() {
   const [milestoneReminders, setMilestoneReminders] = useState<MilestoneReminder[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [contractorId, setContractorId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Fetch contractor ID when user is available
+  useEffect(() => {
+    if (user) {
+      fetchContractorId();
+    }
+  }, [user]);
+
+  const fetchContractorId = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('contractor_profiles')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error) throw error;
+      setContractorId(data?.id || null);
+    } catch (err) {
+      console.error('Failed to fetch contractor ID:', err);
+    }
+  };
 
   if (!user) {
     return <div className="min-h-screen flex items-center justify-center text-slate-600 pt-24">Please sign in</div>;
@@ -108,6 +135,52 @@ export default function ProjectsEnhanced() {
       currency: currency || 'UGX',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Calculate total project budget from milestones
+  const calculateProjectBudget = (project: OngoingProject | CompletedProject) => {
+    if (!project.milestones) return 0;
+    return project.milestones.reduce((total, milestone) => {
+      return total + (milestone.milestone_budget || 0);
+    }, 0);
+  };
+
+  // Filter and sort projects
+  const getFilteredAndSortedProjects = (projects: (OngoingProject | CompletedProject)[]) => {
+    let filtered = projects.filter(project => {
+      const matchesSearch =
+        project.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        project.contract_number.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === 'all' ||
+        project.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+
+    // Sort projects
+    filtered.sort((a, b) => {
+      let compareValue = 0;
+
+      switch (sortBy) {
+        case 'date':
+          compareValue = new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+          break;
+        case 'amount':
+          compareValue = (a.contract_amount || 0) - (b.contract_amount || 0);
+          break;
+        case 'client':
+          compareValue = a.client_name.localeCompare(b.client_name);
+          break;
+        default:
+          compareValue = 0;
+      }
+
+      return sortOrder === 'asc' ? compareValue : -compareValue;
+    });
+
+    return filtered;
   };
 
   const formatDate = (date: string) => {
@@ -893,19 +966,18 @@ export default function ProjectsEnhanced() {
   }
 
   // Proof of Work Modal
-  if (showProofOfWorkModal && selectedMilestoneForProof) {
+  if (showProofOfWorkModal && selectedMilestoneForProof && contractorId) {
     return (
-      <MilestoneProofOfWorkModal
-        contractId={selectedMilestoneForProof.contractId}
+      <ProjectsPhotoLockUploadModal
         milestoneId={selectedMilestoneForProof.milestoneId}
         milestoneNumber={selectedMilestoneForProof.milestoneNumber}
         milestoneName={selectedMilestoneForProof.milestoneName}
-        userId={user?.id || ''}
-        userName={user?.email || 'User'}
+        contractorId={contractorId}
         onSuccess={async () => {
           setShowProofOfWorkModal(false);
           setSelectedMilestoneForProof(null);
           await refetch();
+          await loadSOPEvidence(selectedMilestoneForProof.contractId);
         }}
         onClose={() => {
           setShowProofOfWorkModal(false);
